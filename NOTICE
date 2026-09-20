@@ -1,0 +1,15 @@
+DRM
+Copyright 2026 DRM Authors
+
+This project includes code derived from:
+
+- Hugging Face Diffusers (Apache License 2.0)
+  https://github.com/huggingface/diffusers
+  The SD3 transformer implementation in drm/transformer.py is based on
+  diffusers.models.transformers.transformer_sd3.SD3Transformer2DModel,
+  with modifications to extract intermediate features for reward modeling.
+
+- Hugging Face Diffusers training examples (Apache License 2.0)
+  Training utilities (prompt encoding, flow-matching timestep sampling,
+  accelerate/DeepSpeed launch patterns) follow Diffusers DreamBooth / SD3
+  training scripts.
