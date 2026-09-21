@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="description"
+          content="DRM: Diffusion-based Reward Model With Step-wise Guidance">
+    <meta name="keywords" content="Diffusion, Reward Model, Step-wise GRPO, Step-wise Sampling, Human Preference Alignment, CVPR 2026">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DRM: Diffusion-based Reward Model With Step-wise Guidance</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+
+    <!-- MathJax for LaTeX rendering -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                tags: 'none'
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            svg: { fontCache: 'global' },
+            startup: {
+                ready: function () {
+                    MathJax.startup.defaultReady();
+                }
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+    <style>
+        /* ===========================
+           Design tokens
+           =========================== */
+        :root {
+            --bg: #fbfaf7;
+            --bg-soft: #f3eee5;
+            --bg-card: #ffffff;
+            --ink: #14171f;
+            --ink-soft: #2a2f3a;
+            --muted: #6a6f7e;
+            --line: rgba(20, 23, 31, 0.08);
+            --line-strong: rgba(20, 23, 31, 0.16);
+
+            --brand-1: #2b3aa0;
+            --brand-2: #6a44d0;
+            --brand-3: #b6478e;
+            --accent: #d97757;
+
+            --grad-brand: linear-gradient(135deg, #2b3aa0 0%, #6a44d0 55%, #b6478e 100%);
+            --grad-soft: linear-gradient(180deg, #fdfbf6 0%, #f5efe3 100%);
+
+            --shadow-sm: 0 1px 2px rgba(20, 23, 31, 0.04), 0 2px 6px rgba(20, 23, 31, 0.04);
+            --shadow-md: 0 4px 14px rgba(20, 23, 31, 0.06), 0 12px 32px rgba(20, 23, 31, 0.06);
+            --shadow-lg: 0 10px 30px rgba(20, 23, 31, 0.08), 0 24px 60px rgba(20, 23, 31, 0.10);
+
+            --radius-sm: 8px;
+            --radius: 14px;
+            --radius-lg: 22px;
+
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-serif: 'Crimson Pro', 'Iowan Old Style', 'Charter', Georgia, serif;
+            --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            font-family: var(--font-sans);
+            color: var(--ink);
+            background: var(--bg);
+            line-height: 1.7;
+            font-size: 16.5px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            font-feature-settings: "ss01", "cv11", "cv02";
+        }
+        ::selection { background: rgba(106, 68, 208, 0.18); color: var(--ink); }
+
+        body::before {
+            content: "";
+            position: fixed; inset: 0;
+            pointer-events: none;
+            background-image: radial-gradient(rgba(20, 23, 31, 0.035) 1px, transparent 1px);
+            background-size: 3px 3px;
+            opacity: 0.6;
+            z-index: 0;
+        }
+        body > * { position: relative; z-index: 1; }
+
+        /* ===== Hero ===== */
+        .hero-section {
+            position: relative;
+            padding: 96px 24px 56px;
+            text-align: center;
+            background: var(--grad-soft);
+            overflow: hidden;
+        }
+        .hero-section::before {
+            content: "";
+            position: absolute;
+            top: -180px; left: 50%;
+            width: 900px; height: 900px;
+            transform: translateX(-50%);
+            background: radial-gradient(closest-side,
+                        rgba(106, 68, 208, 0.18),
+                        rgba(43, 58, 160, 0.10) 45%,
+                        transparent 70%);
+            filter: blur(40px);
+            pointer-events: none;
+        }
+        .hero-section::after {
+            content: "";
+            position: absolute;
+            bottom: -120px; right: -120px;
+            width: 480px; height: 480px;
+            background: radial-gradient(closest-side,
+                        rgba(217, 119, 87, 0.16),
+                        transparent 70%);
+            filter: blur(40px);
+            pointer-events: none;
+        }
+        .hero-inner { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; }
+
+        .venue-badge {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-size: 0.86rem; font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--ink);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(20, 23, 31, 0.08);
+            box-shadow: var(--shadow-sm);
+            padding: 7px 14px;
+            border-radius: 999px;
+            margin-bottom: 28px;
+        }
+        .venue-badge .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--grad-brand);
+            box-shadow: 0 0 0 4px rgba(106, 68, 208, 0.15);
+        }
+
+        .publication-title {
+            font-family: var(--font-sans);
+            font-size: clamp(2.05rem, 3.6vw, 3.05rem);
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            line-height: 1.12;
+            color: var(--ink);
+            margin: 0 auto 22px;
+            max-width: 1000px;
+        }
+        .publication-title .drm {
+            background: var(--grad-brand);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .tldr {
+            max-width: 760px; margin: 0 auto 28px;
+            font-size: 1.05rem;
+            color: var(--ink-soft);
+            line-height: 1.65;
+        }
+        .tldr b { color: var(--ink); font-weight: 700; }
+
+        .authors {
+            font-size: 1.05rem;
+            margin: 14px auto 4px;
+            max-width: 950px;
+            color: var(--ink);
+        }
+        .author-block { display: inline-block; margin: 0 6px; }
+        .author-block sup { color: var(--muted); font-weight: 500; }
+        .affiliations {
+            font-size: 0.97rem;
+            color: var(--muted);
+            margin: 8px 0 4px;
+        }
+        .footnote-line {
+            font-size: 0.83rem;
+            color: var(--muted);
+            margin-top: 10px;
+            font-style: italic;
+        }
+
+        .links {
+            margin: 36px 0 8px;
+            display: flex; flex-wrap: wrap; gap: 10px;
+            justify-content: center;
+        }
+        .btn-link {
+            display: inline-flex; align-items: center; gap: 9px;
+            background: var(--ink);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 0.93rem; font-weight: 600;
+            letter-spacing: 0.01em;
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                        box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                        background 0.25s ease;
+            box-shadow: 0 1px 3px rgba(20, 23, 31, 0.12);
+        }
+        .btn-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(20, 23, 31, 0.18);
+            color: #fff;
+            background: linear-gradient(135deg, #14171f 0%, #2b3aa0 100%);
+        }
+        .btn-link.disabled {
+            background: rgba(20, 23, 31, 0.05);
+            color: var(--muted);
+            border: 1px dashed rgba(20, 23, 31, 0.18);
+            box-shadow: none;
+            pointer-events: none;
+        }
+        .btn-link i { font-size: 0.95rem; }
+
+        /* ===== Sections ===== */
+        section.content {
+            max-width: 1080px; margin: 0 auto;
+            padding: 56px 24px;
+        }
+        section.content.alt-wrap {
+            max-width: none;
+            background: var(--bg-soft);
+            padding: 56px 0;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+        section.content.alt-wrap > .inner {
+            max-width: 1080px; margin: 0 auto; padding: 0 24px;
+        }
+
+        section.content h2 {
+            font-size: clamp(1.7rem, 2.2vw, 2.05rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+            margin: 0 0 28px;
+            text-align: center;
+            position: relative;
+            padding-bottom: 14px;
+        }
+        section.content h2::after {
+            content: "";
+            position: absolute;
+            bottom: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 56px; height: 3px;
+            background: var(--grad-brand);
+            border-radius: 2px;
+        }
+        section.content h3 {
+            font-size: 1.22rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            margin: 32px 0 12px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        section.content h3::before {
+            content: "";
+            display: inline-block;
+            width: 4px; height: 18px;
+            background: var(--grad-brand);
+            border-radius: 2px;
+        }
+        section.content p {
+            font-size: 1.02rem;
+            color: var(--ink-soft);
+            margin-bottom: 14px;
+            line-height: 1.75;
+        }
+        section.content p b { color: var(--ink); font-weight: 700; }
+
+        .abstract-first::first-letter {
+            font-family: var(--font-serif);
+            font-weight: 600;
+            font-size: 3.4rem;
+            float: left;
+            line-height: 0.9;
+            margin: 6px 12px 0 0;
+            background: var(--grad-brand);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ===== Figures ===== */
+        figure.fig {
+            margin: 32px auto;
+            text-align: center;
+        }
+        /* Soft "passe-partout" frame so white-canvas PDFs don't clash
+           with the warm page background. The image sits inside a slightly
+           tinted card with generous padding and a faint inner ring. */
+        figure.fig .frame {
+            display: inline-block;
+            padding: 20px 22px;
+            background: linear-gradient(180deg,
+                        rgba(255, 255, 255, 0.92) 0%,
+                        rgba(253, 251, 246, 0.92) 100%);
+            border: 1px solid rgba(20, 23, 31, 0.07);
+            border-radius: calc(var(--radius) + 4px);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+                0 1px 2px rgba(20, 23, 31, 0.04),
+                0 12px 36px rgba(20, 23, 31, 0.07);
+            transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1),
+                        box-shadow 0.4s ease;
+            max-width: 100%;
+        }
+        figure.fig .frame:hover {
+            transform: translateY(-3px);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+                0 4px 10px rgba(20, 23, 31, 0.06),
+                0 22px 56px rgba(20, 23, 31, 0.10);
+        }
+        figure.fig img {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+            border-radius: var(--radius-sm);
+            background: #fff;
+            border: none;
+            box-shadow: none;
+            transition: none;
+        }
+        figure.fig img:hover { transform: none; box-shadow: none; }
+        figure.fig figcaption {
+            margin: 16px auto 0;
+            font-size: 0.92rem;
+            color: var(--muted);
+            text-align: center;
+            max-width: 760px;
+            line-height: 1.6;
+        }
+        figure.fig figcaption b { color: var(--ink); font-weight: 600; }
+        figure.fig figcaption i { color: var(--ink-soft); }
+
+        /* Per-figure sizing — applied to the frame so the whole card
+           (white canvas + padding) honors the cap. */
+        figure.fig.teaser .frame        { max-width: 720px; }
+        figure.fig.teaser img           { max-height: 400px; }
+        figure.fig.arch .frame          { max-width: 940px; }
+        figure.fig.arch img             { max-height: 200px; }
+        figure.fig.stepgrpo .frame      { max-width: 920px; }
+        figure.fig.stepgrpo img         { max-height: 270px; }
+        figure.fig.stepsample .frame    { max-width: 520px; }
+        figure.fig.stepsample img       { max-height: 380px; }
+        figure.fig.reward-line .frame   { max-width: 540px; }
+        figure.fig.reward-line img      { max-height: 320px; }
+        figure.fig.reward-line-2 .frame { max-width: 880px; }
+        figure.fig.reward-line-2 img    { max-height: 260px; }
+        figure.fig.compare .frame       { max-width: 600px; }
+        figure.fig.compare img          { max-height: 540px; }
+        figure.fig.stepsampling .frame  { max-width: 660px; }
+        figure.fig.stepsampling img     { max-height: 420px; }
+        figure.fig.visual-compare .frame{ max-width: 720px; }
+        figure.fig.visual-compare img   { max-height: 440px; }
+        figure.fig.supp-show .frame     { max-width: 780px; }
+        figure.fig.supp-show img        { max-height: 600px; }
+
+        /* ===== Highlight box ===== */
+        .highlight-box {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--line);
+            padding: 18px 22px 18px 26px;
+            border-radius: var(--radius);
+            margin: 22px 0;
+            font-size: 1rem;
+            color: var(--ink-soft);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+        .highlight-box::before {
+            content: "";
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+            background: var(--grad-brand);
+        }
+        .highlight-box b { color: var(--ink); }
+
+        /* ===== Math ===== */
+        .math-display {
+            display: block;
+            text-align: center;
+            margin: 22px auto;
+            padding: 18px 22px;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(20, 23, 31, 0.06);
+            border-radius: var(--radius);
+            max-width: 760px;
+            font-size: 1.05rem;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .math-display mjx-container { margin: 0 !important; }
+
+        /* ===== Tables ===== */
+        .table-wrap {
+            overflow-x: auto;
+            margin: 22px 0;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow-sm);
+            padding: 8px;
+        }
+        table.results {
+            border-collapse: collapse;
+            margin: 0 auto;
+            font-size: 0.94rem;
+            min-width: 640px;
+            width: 100%;
+        }
+        table.results th, table.results td {
+            padding: 11px 16px;
+            text-align: center;
+            border-bottom: 1px solid var(--line);
+        }
+        table.results thead th {
+            background: transparent;
+            color: var(--ink);
+            font-weight: 700;
+            font-size: 0.86rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            border-top: none;
+            border-bottom: 2px solid var(--ink);
+            padding-top: 14px; padding-bottom: 14px;
+        }
+        table.results tbody tr { transition: background 0.2s ease; }
+        table.results tbody tr:hover { background: rgba(106, 68, 208, 0.04); }
+        table.results tbody tr.highlight {
+            background: linear-gradient(90deg,
+                        rgba(43, 58, 160, 0.06) 0%,
+                        rgba(106, 68, 208, 0.08) 50%,
+                        rgba(182, 71, 142, 0.06) 100%);
+            font-weight: 600;
+        }
+        table.results tbody tr.highlight td:first-child { color: var(--ink); }
+        table.results .best {
+            font-weight: 700;
+            color: #b6478e;
+        }
+        table.results .second {
+            font-weight: 700;
+            color: var(--ink);
+            text-decoration: underline;
+            text-decoration-color: rgba(106, 68, 208, 0.4);
+            text-underline-offset: 3px;
+        }
+        table.results caption {
+            caption-side: bottom;
+            font-size: 0.86rem;
+            color: var(--muted);
+            padding: 14px 8px 6px;
+            text-align: center;
+            line-height: 1.55;
+        }
+
+        /* ===== Contributions ===== */
+        .contrib-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+            margin: 28px 0 8px;
+        }
+        .contrib-card {
+            position: relative;
+            padding: 26px 24px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
+                        box-shadow 0.35s ease,
+                        border-color 0.35s ease;
+            overflow: hidden;
+        }
+        /* Top accent line */
+        .contrib-card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--grad-brand);
+            opacity: 0.85;
+        }
+        .contrib-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--line-strong);
+        }
+        .contrib-head {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .contrib-num {
+            font-family: var(--font-serif);
+            font-size: 2.3rem;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            background: var(--grad-brand);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .contrib-tag {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--brand-2);
+            background: rgba(106, 68, 208, 0.08);
+            border: 1px solid rgba(106, 68, 208, 0.18);
+            padding: 5px 10px;
+            border-radius: 999px;
+        }
+        .contrib-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            margin: 0 0 10px;
+            line-height: 1.4;
+            /* override generic h3 styling */
+            display: block;
+            padding: 0;
+        }
+        .contrib-title::before { content: none; }
+        .contrib-body {
+            font-size: 0.96rem;
+            color: var(--ink-soft);
+            line-height: 1.65;
+            margin: 0;
+        }
+        .contrib-body b { color: var(--ink); font-weight: 700; }
+
+        pre.bibtex {
+            background: var(--ink);
+            color: #e6edf3;
+            padding: 22px 26px;
+            border-radius: var(--radius);
+            font-family: var(--font-mono);
+            font-size: 0.86rem;
+            overflow-x: auto;
+            line-height: 1.7;
+            box-shadow: var(--shadow-md);
+        }
+
+        /* ===== Footer ===== */
+        footer {
+            text-align: center;
+            padding: 40px 20px 56px;
+            color: var(--muted);
+            font-size: 0.88rem;
+            border-top: 1px solid var(--line);
+            background: var(--bg);
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 960px) {
+            .contrib-grid { grid-template-columns: 1fr; gap: 14px; }
+        }
+        @media (max-width: 768px) {
+            .hero-section { padding: 64px 18px 36px; }
+            .publication-title { font-size: 1.85rem; }
+            section.content { padding: 40px 18px; }
+            section.content.alt-wrap { padding: 40px 0; }
+            section.content.alt-wrap > .inner { padding: 0 18px; }
+            section.content h2 { font-size: 1.45rem; }
+            .contrib-grid { grid-template-columns: 1fr; gap: 14px; }
+            .contrib-card { padding: 22px 20px; }
+            .abstract-first::first-letter { font-size: 2.6rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero-section">
+  <div class="hero-inner">
+    <div class="venue-badge"><span class="dot"></span> Accepted at CVPR 2026</div>
+
+    <h1 class="publication-title">
+        <span class="drm">DRM</span>: Diffusion-based Reward Model<br/>With Step-wise Guidance
+    </h1>
+
+    <p class="tldr">
+        <b>TL;DR.</b> A pre-trained diffusion model is itself a powerful reward model.
+        DRM scores any noisy intermediate latent, enabling dense per-step rewards
+        for RL alignment (Step-GRPO) and a training-free quality booster (Step-wise Sampling).
+    </p>
+
+    <div class="authors">
+        <span class="author-block">Jaxon Zhang,</span>
+        <span class="author-block">Binxin Yang,</span>
+        <span class="author-block">Hubery Yin,</span>
+        <span class="author-block">Chen Li,</span>
+        <span class="author-block">Jing LYU</span>
+    </div>
+
+    <div class="links">
+        <a class="btn-link disabled" href="#">
+            <i class="fas fa-file-pdf"></i> Paper / arXiv (Coming Soon)
+        </a>
+        <a class="btn-link" href="https://github.com/jjaxonx/DRM" target="_blank" rel="noopener">
+            <i class="fab fa-github"></i> Code
+        </a>
+        <a class="btn-link disabled" href="#">
+            <i class="fas fa-cubes"></i> Models (Coming Soon)
+        </a>
+    </div>
+  </div>
+</section>
+
+<!-- Teaser -->
+<section class="content" style="padding-top: 8px;">
+    <figure class="fig teaser">
+        <div class="frame">
+            <img src="static/images/teaser.png" alt="Teaser: DRM provides fine-grained reward along the entire denoising trajectory">
+        </div>
+        <figcaption>
+            <b>Comparison between previous reward models and DRM.</b>
+            Existing reward models treat the generation process as a black box,
+            providing only a single, terminal reward based on the final output.
+            Our DRM offers fine-grained rewards for any noisy latent along the entire denoising trajectory.
+        </figcaption>
+    </figure>
+</section>
+
+<!-- Contributions -->
+<section class="content alt-wrap">
+    <div class="inner">
+        <h2>Contributions</h2>
+        <div class="contrib-grid">
+            <article class="contrib-card">
+                <div class="contrib-head">
+                    <span class="contrib-num">01</span>
+                    <span class="contrib-tag">Reward Model</span>
+                </div>
+                <h3 class="contrib-title">A diffusion model is a reward model.</h3>
+                <p class="contrib-body">
+                    We introduce <b>DRM</b>, repurposing a pre-trained diffusion model as the
+                    evaluative backbone. It inherits a deep understanding of aesthetics and
+                    composition, and uniquely scores <b>noisy intermediate latents</b> at any
+                    stage of generation.
+                </p>
+            </article>
+            <article class="contrib-card">
+                <div class="contrib-head">
+                    <span class="contrib-num">02</span>
+                    <span class="contrib-tag">Optimization</span>
+                </div>
+                <h3 class="contrib-title">Step-GRPO: dense per-step rewards.</h3>
+                <p class="contrib-body">
+                    A reinforcement learning algorithm that resolves the
+                    <b>credit-assignment problem</b> in diffusion alignment. Step-GRPO uses
+                    DRM's per-step rewards for far more stable and efficient policy optimization
+                    than terminal-reward GRPO.
+                </p>
+            </article>
+            <article class="contrib-card">
+                <div class="contrib-head">
+                    <span class="contrib-num">03</span>
+                    <span class="contrib-tag">Inference</span>
+                </div>
+                <h3 class="contrib-title">Step-wise Sampling: training-free.</h3>
+                <p class="contrib-body">
+                    A plug-and-play inference strategy. At each denoising step we explore
+                    multiple SDE branches and let DRM <b>greedily steer</b> the trajectory
+                    toward higher-quality outcomes — no fine-tuning required.
+                </p>
+            </article>
+        </div>
+    </div>
+</section>
+
+<!-- Method -->
+<section class="content alt-wrap">
+    <div class="inner">
+        <h2>Method</h2>
+
+        <h3>1. Diffusion-based Reward Model (DRM)</h3>
+        <p>
+            DRM predicts human preferences by leveraging the intermediate features from the
+            Diffusion Transformer (DiT) of a pre-trained diffusion model. We initialize the backbone
+            from <b>SD3.5-Medium</b> (2.5B parameters) and truncate the last three transformer layers
+            so that the parameter count matches HPSv3-2B for fair comparison.
+        </p>
+        <p>
+            Given a noisy latent $x_{t}$ at timestep $t$, the truncated DiT produces visual features
+            $f_{v} \in \mathbb{R}^{L \times d}$ that are fed into a lightweight reward head:
+            an MLP projects $f_v$ into a lower-dimensional space, after which the features are
+            reshaped into a 2D map and processed by a small convolutional network, followed by
+            pooling and a final linear projection to produce the preference score $s$.
+        </p>
+        <figure class="fig arch">
+            <div class="frame">
+            <img src="static/images/arch.png" alt="DRM architecture and training pipeline">
+        </div>
+            <figcaption>
+                <b>Overview of the Diffusion-based Reward Model (DRM).</b>
+                <i>(Left)</i> Training pipeline: DRM takes a pair of preferred and dispreferred images,
+                both corrupted with noise at a specific timestep $t$, and predicts their reward scores.
+                The model is optimized via the Bradley–Terry preference loss.
+                <i>(Right)</i> The detailed architecture of our Reward Output Head.
+            </figcaption>
+        </figure>
+        <p>
+            DRM is trained on triplets $(I^{\text{win}}, I^{\text{lose}}, p)$ from HPDv3, Pick-A-Pic and ImageReward
+            (1.4M pairs total). For a randomly sampled timestep $t$, both images are corrupted via the
+            forward diffusion process and scored:
+        </p>
+        <div class="math-display">
+            \[ \mathcal{L}_{\text{DRM}} = -\log \sigma\!\left( s^{\text{win}} - s^{\text{lose}} \right). \]
+        </div>
+
+        <h3>2. Step-wise GRPO (Step-GRPO)</h3>
+        <p>
+            Standard GRPO treats the multi-step generation process as a black box and applies the
+            <i>terminal</i> reward uniformly to every timestep — an imprecise credit assignment that
+            ignores the varying contribution of each step. Because DRM is initialized from a diffusion
+            backbone, it can score noisy latents at any timestep, enabling dense per-step rewards.
+        </p>
+        <figure class="fig stepgrpo">
+            <div class="frame">
+            <img src="static/images/stepgrpo.png" alt="GRPO vs. Step-wise GRPO">
+        </div>
+            <figcaption>
+                <b>GRPO vs. Step-wise GRPO.</b>
+                <i>(Left)</i> Naive GRPO relies on a single terminal reward computed at $t{=}0$
+                and broadcasts it uniformly to all preceding steps.
+                <i>(Right)</i> Step-GRPO branches out $k$ candidate samples at each timestep via SDE
+                and uses DRM to compute a precise, step-specific reward and advantage.
+            </figcaption>
+        </figure>
+        <p>
+            At each reverse-diffusion step $t$, starting from $x_{t+1}$, we draw $k$ SDE candidates
+            $\{x_t^i\}_{i=1}^k$ and score them with DRM. The <b>immediate advantage</b> for each
+            candidate is normalized within the local group:
+        </p>
+        <div class="math-display">
+            \[ \hat A_t^i = \frac{R(x_t^i, c) - \mathrm{mean}\!\left(\{R(x_t^i, c)\}_{i=1}^{k}\right)}
+                                  {\mathrm{std}\!\left(\{R(x_t^i, c)\}_{i=1}^{k}\right)}. \]
+        </div>
+        <div class="highlight-box">
+            Unlike conventional GRPO, this advantage is a <b>local</b> quantity that scores the decision
+            at the current timestep — yielding a much more direct and fine-grained policy-gradient signal.
+        </div>
+
+        <h3>3. Step-wise Sampling (Training-free)</h3>
+        <p>
+            DRM also doubles as an <i>inference-time</i> quality booster. Conventional deterministic
+            samplers follow a single fixed trajectory, so any early-step error compounds to the final image.
+            Step-wise Sampling implements an <b>“explore-and-select”</b> mechanism: at each timestep we
+            (1) explore by drawing $k$ SDE successors, (2) score each with DRM, and (3) greedily commit
+            to the highest-scoring branch.
+        </p>
+        <figure class="fig stepsample">
+            <div class="frame">
+            <img src="static/images/stepsample-1.png" alt="Step-wise Sampling overview">
+        </div>
+            <figcaption>
+                <b>Overview of Step-wise Sampling.</b>
+                At each step $t$, we branch into $k$ candidates via SDE.
+                The DRM scores them and the top-scoring latent continues the trajectory.
+            </figcaption>
+        </figure>
+        <div class="math-display">
+            \[ x_{t-1} = \arg\max_{x_{t-1}^{i}}\; R(x_{t-1}^{i}, c). \]
+        </div>
+    </div>
+</section>
+
+<!-- Experiments -->
+<section class="content">
+    <h2>Experiments</h2>
+
+    <h3>Reward Modeling Accuracy</h3>
+    <p>
+        We evaluate DRM against leading reward models on standard preference benchmarks.
+        Despite using only <b>2B parameters</b>, DRM significantly outperforms the similarly-sized
+        VLM-based <i>HPSv3-2B</i> and is competitive with the much larger 7B variant — strong evidence
+        that a diffusion backbone is a more parameter-efficient route to reward modeling.
+    </p>
+    <div class="table-wrap">
+        <table class="results">
+            <thead>
+            <tr>
+                <th>Model</th>
+                <th>Size</th>
+                <th>ImageReward&nbsp;↑</th>
+                <th>PickScore&nbsp;↑</th>
+                <th>HPDv2&nbsp;↑</th>
+                <th>HPDv3&nbsp;↑</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr><td>CLIP ViT-H/14</td><td>—</td><td>57.1</td><td>60.8</td><td>65.1</td><td>48.6</td></tr>
+            <tr><td>Aesthetic Predictor</td><td>—</td><td>57.4</td><td>56.8</td><td>76.8</td><td>59.9</td></tr>
+            <tr><td>ImageReward</td><td>—</td><td>65.1</td><td>61.1</td><td>74.0</td><td>58.6</td></tr>
+            <tr><td>PickScore</td><td>—</td><td>61.6</td><td>70.5</td><td>79.8</td><td>65.6</td></tr>
+            <tr><td>HPSv2</td><td>—</td><td>65.7</td><td>63.8</td><td>83.3</td><td>65.3</td></tr>
+            <tr><td>MPS</td><td>—</td><td class="best">67.5</td><td>63.1</td><td class="second">83.5</td><td>64.3</td></tr>
+            <tr><td>HPSv3-2B</td><td>2B</td><td>57.9</td><td>63.6</td><td>80.8</td><td>66.3</td></tr>
+            <tr><td>HPSv3-7B</td><td>7B</td><td class="second">66.8</td><td>72.8</td><td class="best">85.4</td><td class="best">76.9</td></tr>
+            <tr class="highlight">
+                <td><b>DRM (Ours)</b></td><td>2B</td>
+                <td>64.1</td>
+                <td class="best">73.4</td>
+                <td>82.2</td>
+                <td class="second">74.0</td>
+            </tr>
+            </tbody>
+            <caption>
+                Preference prediction accuracy (%). <span class="best">Bold</span> = best, <span class="second">underlined</span> = second-best.
+                DRM achieves the best <b>PickScore</b> and second-best <b>HPDv3</b> with only 2B parameters.
+            </caption>
+        </table>
+    </div>
+
+    <h3>Step-GRPO: Faster Convergence, Higher Ceiling</h3>
+    <figure class="fig reward-line">
+        <div class="frame">
+            <img src="static/images/reward_line.png" alt="Reward curves">
+        </div>
+        <figcaption>
+            <b>Reward curves for various RL algorithms optimized using our DRM.</b>
+            Step-GRPO not only reaches a higher final reward but also converges
+            <b>2.5× faster (in steps)</b> than the standard GRPO baseline.
+        </figcaption>
+    </figure>
+    <p>
+        We RL-finetune <i>SD3.5-Medium</i> with PickScore, HPSv3 or DRM as reward, all under the same
+        Flow-GRPO recipe; for DRM we additionally evaluate the Step-GRPO algorithm.
+    </p>
+    <div class="table-wrap">
+        <table class="results">
+            <thead>
+            <tr>
+                <th>Method</th>
+                <th>ImageReward&nbsp;↑</th>
+                <th>PickScore&nbsp;↑</th>
+                <th>HPSv3&nbsp;↑</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr><td>SD3.5-Medium (base)</td><td>1.01</td><td>16.76</td><td>8.95</td></tr>
+            <tr><td>+ PickScore &amp; GRPO</td><td>1.14</td><td>16.94</td><td>9.64</td></tr>
+            <tr><td>+ HPSv3 &amp; GRPO</td><td class="second">1.15</td><td>16.90</td><td>9.71</td></tr>
+            <tr><td>+ DRM &amp; GRPO</td><td>1.14</td><td class="second">16.95</td><td class="second">10.07</td></tr>
+            <tr class="highlight">
+                <td><b>+ DRM &amp; Step-GRPO (Ours)</b></td>
+                <td class="best">1.17</td>
+                <td class="best">17.04</td>
+                <td class="best">10.28</td>
+            </tr>
+            </tbody>
+            <caption>
+                Performance of SD3.5-Medium fine-tuned with different reward models.
+                <b>DRM + Step-GRPO</b> sets a new state-of-the-art on all three benchmarks.
+            </caption>
+        </table>
+    </div>
+
+    <figure class="fig reward-line-2">
+        <div class="frame">
+            <img src="static/images/reward_line_correct_rebuttal.png"
+             alt="Reward growth vs. steps and GPU hours">
+        </div>
+        <figcaption>
+            <b>Reward curves with steps (left) and GPU hours (right) on the x-axis.</b>
+            Even with the smallest group size $k{=}2$, Step-GRPO already outperforms GRPO,
+            and converges roughly <b>3.5× faster in GPU-hours</b>.
+        </figcaption>
+    </figure>
+
+    <h3>Qualitative Comparison</h3>
+    <figure class="fig compare">
+        <div class="frame">
+            <img src="static/images/compare.png" alt="Qualitative comparison across reward models">
+        </div>
+        <figcaption>
+            <b>Qualitative comparison of SD3.5-Medium optimized by various reward models.</b>
+            DRM + Step-GRPO produces noticeably finer detail, fewer artifacts and more coherent
+            structures than competing methods.
+        </figcaption>
+    </figure>
+</section>
+
+<!-- Step-wise Sampling -->
+<section class="content alt-wrap">
+    <div class="inner">
+        <h2>Step-wise Sampling: Training-free Plug-and-Play</h2>
+        <p>
+            Step-wise Sampling needs <b>no fine-tuning</b>: simply branch into $k$ SDE candidates per
+            denoising step and use DRM to greedily pick the best one. We sweep
+            $k \in \{1, 2, 4, 6\}$ on the same protocol as Step-GRPO.
+        </p>
+        <div class="table-wrap">
+            <table class="results">
+                <thead>
+                <tr>
+                    <th>$k$</th>
+                    <th>Time (s) ↓</th>
+                    <th>ImageReward ↑</th>
+                    <th>PickScore ↑</th>
+                    <th>HPSv3 ↑</th>
+                    <th>LPIPS ↑</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr><td>1 (base)</td><td class="best">2.88</td><td>1.01</td><td>16.76</td><td>8.95</td><td>0.650</td></tr>
+                <tr><td>2</td><td class="second">5.63</td><td>1.08</td><td class="second">16.84</td><td>9.02</td><td>0.661</td></tr>
+                <tr><td>4</td><td>7.75</td><td class="second">1.14</td><td>16.81</td><td class="second">9.32</td><td class="best">0.663</td></tr>
+                <tr class="highlight"><td><b>6</b></td><td>9.83</td><td class="best">1.15</td><td class="best">16.93</td><td class="best">9.49</td><td class="second">0.662</td></tr>
+                </tbody>
+                <caption>
+                    Performance of SD3.5-Medium with Step-wise Sampling (512×512, 50 steps, bfloat16).
+                    All preference metrics improve with $k$, and LPIPS confirms diversity is preserved.
+                </caption>
+            </table>
+        </div>
+        <figure class="fig stepsampling">
+            <div class="frame">
+            <img src="static/images/stepsampling.png" alt="Step-wise Sampling qualitative results">
+        </div>
+            <figcaption>
+                <b>Step-wise Sampling enhances both prompt fidelity and aesthetic quality.</b>
+                Comparison of SD3.5-Medium outputs without/with Step-wise Sampling on the same prompts.
+            </figcaption>
+        </figure>
+    </div>
+</section>
+
+<!-- More results -->
+<section class="content">
+    <h2>More Visual Results</h2>
+    <figure class="fig visual-compare">
+        <div class="frame">
+            <img src="static/images/visual_compare_rebuttal.png" alt="More visual comparisons">
+        </div>
+        <figcaption>
+            Additional visual comparisons across baselines and our full method
+            (DRM + Step-GRPO + Step-wise Sampling).
+        </figcaption>
+    </figure>
+    <figure class="fig supp-show">
+        <div class="frame">
+            <img src="static/images/supp-show.png" alt="Supplementary gallery">
+        </div>
+        <figcaption>
+            Supplementary gallery generated by our final model.
+        </figcaption>
+    </figure>
+</section>
+
+<footer>
+    <p>© 2026 Jaxon Zhang</p>
+</footer>
+
+</body>
+</html>
